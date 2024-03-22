@@ -1,38 +1,22 @@
+// models/comment.go
 package models
 
 import (
-	"github.com/asaskevich/govalidator"
-	"gorm.io/gorm"
+	"time"
+
+	"github.com/go-playground/validator/v10"
 )
 
 type Comment struct {
-	GormModel
-	UserID  uint   `json:"user_id" `
-	Message string `json:"message" valid:"required~Your message is required"`
-	PhotoID uint   `json:"photo_id"`
-	User    *User
-	Photo   *Photo
+	ID        uint      `gorm:"primary_key" json:"id"`
+	UserID    uint      `json:"user_id"`
+	PhotoID   uint      `json:"photo_id"`
+	Message   string    `json:"message" validate:"required"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (c *Comment) BeforeCreate(tx *gorm.DB) (err error) {
-
-	_, errCreate := govalidator.ValidateStruct(c)
-
-	if errCreate != nil {
-		err = errCreate
-		return
-	}
-	err = nil
-	return
-}
-
-func (c *Comment) BeforeUpdate(tx *gorm.DB) (err error) {
-	_, errCreate := govalidator.ValidateStruct(c)
-
-	if errCreate != nil {
-		err = errCreate
-		return
-	}
-	err = nil
-	return
+func (c *Comment) Validate() error {
+	validate := validator.New()
+	return validate.Struct(c)
 }

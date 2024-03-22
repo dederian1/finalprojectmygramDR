@@ -1,39 +1,23 @@
+// models/photo.go
 package models
 
 import (
-	"github.com/asaskevich/govalidator"
-	"gorm.io/gorm"
+	"time"
+
+	"github.com/go-playground/validator/v10"
 )
 
 type Photo struct {
-	GormModel
-	Title    string `json:"title" valid:"required~Your title is required"`
-	Caption  string `json:"caption"`
-	PhotoURL string `json:"photo_url" valid:"required~Your photo url is required"`
-	UserID   uint   `json:"user_id"`
-	User     *User
-	Comments []Comment `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"comments"`
+	ID        uint      `gorm:"primary_key" json:"id"`
+	Title     string    `json:"title" validate:"required"`
+	Caption   string    `json:"caption"`
+	PhotoURL  string    `json:"photo_url" validate:"required"`
+	UserID    uint      `json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (p *Photo) BeforeCreate(tx *gorm.DB) (err error) {
-
-	_, errCreate := govalidator.ValidateStruct(p)
-
-	if errCreate != nil {
-		err = errCreate
-		return
-	}
-	err = nil
-	return
-}
-
-func (p *Photo) BeforeUpdate(tx *gorm.DB) (err error) {
-	_, errCreate := govalidator.ValidateStruct(p)
-
-	if errCreate != nil {
-		err = errCreate
-		return
-	}
-	err = nil
-	return
+func (p *Photo) Validate() error {
+	validate := validator.New()
+	return validate.Struct(p)
 }

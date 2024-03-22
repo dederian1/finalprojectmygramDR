@@ -1,140 +1,91 @@
+// controllers/userController.go
 package controllers
 
 import (
-	"mygram/database"
-	"mygram/helpers"
+	"mygram/config"
 	"mygram/models"
 	"net/http"
-	"strconv"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	appJson = "application/json"
-)
-
-func UserRegister(c *gin.Context) {
-	db := database.GetDB()
-	contentType := helpers.GetContentType(c)
-
-	User := models.User{}
-
-	if contentType == appJson {
-		c.ShouldBindJSON(&User)
-	} else {
-		c.ShouldBind(&User)
-	}
-
-	if err := db.Debug().Create(&User).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Bad Request",
-			"msg":   err.Error(),
-		})
-
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"id":       User.ID,
-		"email":    User.Email,
-		"username": User.Username,
-		"age":      User.Age,
-	})
+// HashPassword hashes given password
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	return string(bytes), err
 }
 
-func UserLogin(c *gin.Context) {
-	db := database.GetDB()
-	contentType := helpers.GetContentType(c)
-
-	User := models.User{}
-	if contentType == appJson {
-		c.ShouldBindJSON(&User)
-	} else {
-		c.ShouldBind(&User)
-	}
-
-	password := User.Password
-
-	if err := db.Debug().Where("email = ?", User.Email).Take(&User).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "Unauthorized",
-			"message": "Email or Password wrong",
-		})
-		return
-	}
-
-	comparePass := helpers.ComparePass([]byte(User.Password), []byte(password))
-	if !comparePass {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "Unauthorized",
-			"message": "Email or Password wrong",
-		})
-		return
-	}
-	token := helpers.GenerateToken(User.ID, User.Email)
-	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-	})
+// CheckPasswordHash compares password with hash
+func CheckPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }
 
-func UserUpdate(c *gin.Context) {
-	db := database.GetDB()
+// GetAllUsers - Get all users
+func GetAllUsers(c *gin.Context) {
+	var users []models.User
+	config.DB.Find(&users)
+	c.JSON(http.StatusOK, gin.H{"data": users})
+}
 
-	contentType := helpers.GetContentType(c)
-
-	User := models.User{}
-
-	userId, _ := strconv.Atoi(c.Param("userId"))
-
-	db.First(&User, userId)
-
-	if contentType == appJson {
-		c.ShouldBindJSON(&User)
-	} else {
-		c.ShouldBind(&User)
+// CreateUser - Create a new user
+func CreateUser(c *gin.Context) {
+	var user models.User
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	updates := map[string]interface{}{
-		"Email":    User.Email,
-		"Username": User.Username,
-	}
-	err := db.Model(&User).Where("id = ?", userId).Updates(updates).Error
 
+	// Hash password here (implement your hashing function or use a library)
+	hashedPassword, err := HashPassword(user.Password)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Bad Request",
-			"message": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
+	user.Password = hashedPassword
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":         User.ID,
-		"email":      User.Email,
-		"username":   User.Username,
-		"age":        User.Age,
-		"updated_at": User.UpdatedAt,
-	})
+	config.DB.Create(&user)
+	c.JSON(http.StatusCreated, gin.H{"data": user})
 }
 
-func UserDelete(c *gin.Context) {
-	db := database.GetDB()
+// GetUsers - Get all users
+func GetUsers(c *gin.Context) {
+	var users []models.User
+	config.DB.Find(&users)
+	c.JSON(http.StatusOK, gin.H{"data": users})
+}
 
-	User := models.User{}
-	userId := uint(c.MustGet("userData").(jwt.MapClaims)["id"].(float64))
-
-	err := db.Delete(&User, userId).Error
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Bad Request",
-			"message": err.Error(),
-		})
+// UpdateUser - Update a user
+func UpdateUser(c *gin.Context) {
+	// Get model if exist
+	var user models.User
+	if err := config.DB.Where("id = ?", c.Param("id")).First(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Record not found!"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Your account has been successfully deleted",
-	})
+	// Validate input
+	var input models.User
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Update model
+	config.DB.Model(&user).Updates(input)
+	c.JSON(http.StatusOK, gin.H{"data": user})
+}
+
+// DeleteUser - Delete a user
+func DeleteUser(c *gin.Context) {
+	// Get model if exist
+	var user models.User
+	if err := config.DB.Where("id = ?", c.Param("id")).First(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Record not found!"})
+		return
+	}
+
+	config.DB.Delete(&user)
+	c.JSON(http.StatusOK, gin.H{"data": true})
 }
